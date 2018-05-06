@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <title>Practica grafos</title>
+    <link rel="stylesheet" type="text/css" href="data/practica.css">
+</head>
+<body>
+<h1>PRÁCTICA GRAFOS</h1>
+<p> Alumna: Cristina Serrano</p>
+<p> Grafo de interacciones entre autores de novelas románticas y/o urban fantasy.</p>
+<p> Borde de nodos: negro==autor, verde=ilustrador, azul=otros, rojo=desconocido</p>
+<p> Relleno de nodos: modularidad</p>
+<p> Tamaño de nodos: weighted degree </p>
+<p> Tamaño enlaces: número de trabajos compartidos</p>
+<p> Tooltip: información adicional, con foto</p>
+<p> Click: ventana emergente a url de goodreads sobre autor.</p>
+<p></p>
+
+<script src='http://d3js.org/d3.v3.min.js'></script>
+<script src="http://labratrevenge.com/d3-tip/javascripts/d3.tip.v0.6.3.js"></script>
+
+<script>
+
+    /*var colors = d3.scale.category10();*/
+    var colors =  ["#000000", "#E69F00", "#56B4E9", "#2B9F78", "#F0E442"];
+
+    var width = 1600,
+            height = 1200;
+
+    var tip = d3.tip()
+                .attr('class', 'd3-tip')
+                .offset([-10, 0])
+                .html(function(d) {
+                    return "<h2>" + d['name'] + "</h2>" +
+                            "<br>" +
+                            "Main role: " + d['role']  +
+                            "<br>" +
+                            "Good reads id: " + d['good_reads_id']  +
+                            "<br>" +
+                            "Followers: " + String(d['followers']) +
+                            "<br>" +
+                            "Number of works: " + String(d['works_count']) +
+                            "<br>" +
+                            "Url: " + d['url'] + 
+                            "<br>" +
+                            "<center><img src='" + d['photo'] + "' height='300px'></center>" 
+                            ;
+                });
+
+    var svg = d3.select("body").append("svg")
+            .attr("width", width)
+            .attr("height", height);
+
+    var pattern_def = svg.append("defs");  //append defs in svg
+
+    var force = d3.layout.force()
+            .gravity(0.15)
+            .distance(80)
+            .friction(.8)
+            .linkStrength(0.8)
+            /*.chargeDistance(500)*/
+            .charge(-600)
+            .size([width, height]);
+
+    svg.call(tip);
+
+    d3.json('./data/practica.json', function(error, json) {
+        if (error) throw error;
+
+        force
+                .nodes(json.nodes)
+                .links(json.links)
+                .start();
+
+        var link = svg.selectAll(".link")
+                .data(json.links)
+                .enter().append("line")
+                .attr("class", "link")
+                .style("stroke-width", function (d) {
+                        return d.value;
+    });
+
+        var node = svg.selectAll(".node")
+                .data(json.nodes)
+                .enter().append("g")
+                .attr("class", "node")
+                .call(force.drag)
+                .on('mouseover', tip.show)
+                .on('mouseout', tip.hide);
+
+        node.append("circle")
+                .attr("r", function (d) {
+                    /*return (d['weighted_degree'])/3+4;*/
+                    return(d['degree_networkx']/3+4);
+                    
+                })
+                .attr("fill", function(d){
+                    return d['color_cvd'];
+                    
+                })
+                /* En caso de querer usar comunidad calculada en networkx, descomentar esto
+                .attr("fill", function(d){
+                    return colors[d['community']];
+                }) */
+                .style("stroke", function (d) {
+                    if ('role' in d){
+                        switch (d['role']) {
+                            case "other":
+                                return '#0000ff';
+                            case "author":
+                                return '#000000';
+                            case "illustrator":
+                                return '#00ff00';
+                            default:
+                                return '#ff0000';
+                        }
+                    } 
+                    return '#ff0000';
+                    
+                }).style("stroke-width", 1.5);
+                
+        var padding = 5,
+                maxRadius = 50;
+
+
+        node.select("circle").forEach(collide(.5));
+
+        /*node.append("text")
+                .attr("dx", 12)
+                .attr("dy", ".35em")
+                .text(function(d) { return d.id });*/
+
+
+
+
+
+        node.on('dblclick', function (d) {
+            window.open(d['url'], '_blank');
+            
+        })
+
+        force.on("tick", function() {
+            link.attr("x1", function(d) { return d.source.x; })
+                    .attr("y1", function(d) { return d.source.y; })
+                    .attr("x2", function(d) { return d.target.x; })
+                    .attr("y2", function(d) { return d.target.y; });
+
+            node.attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; });
+        });
+
+
+        function collide(alpha) {
+            var quadtree = d3.geom.quadtree(node);
+            return function(d) {
+                var r = d.radius + maxRadius + padding,
+                        nx1 = d.x - r,
+                        nx2 = d.x + r,
+                        ny1 = d.y - r,
+                        ny2 = d.y + r;
+                quadtree.visit(function(quad, x1, y1, x2, y2) {
+                    if (quad.point && (quad.point !== d)) {
+                        var x = d.x - quad.point.x,
+                                y = d.y - quad.point.y,
+                                l = Math.sqrt(x * x + y * y),
+                                r = d.radius + quad.point.radius + padding;
+                        if (l < r) {
+                            l = (l - r) / l * alpha;
+                            d.x -= x *= l;
+                            d.y -= y *= l;
+                            quad.point.x += x;
+                            quad.point.y += y;
+                        }
+                    }
+                    return x1 > nx2 || x2 < nx1 || y1 > ny2 || y2 < ny1;
+                });
+            };
+        }
+    });
+
+</script>
+</body>
+</html>
